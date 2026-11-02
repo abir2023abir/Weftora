@@ -1,6 +1,15 @@
 "use client";
 
-import { AnimatePresence, motion, useScroll, useTransform } from "motion/react";
+import {
+  AnimatePresence,
+  motion,
+  useAnimationFrame,
+  useMotionValue,
+  useScroll,
+  useSpring,
+  useTransform,
+  useVelocity,
+} from "motion/react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import Photo from "./Photo";
@@ -134,20 +143,58 @@ function Hero() {
 }
 
 function Marquee() {
-  const row = [...services, ...services];
   return (
     <div className="overflow-hidden border-y border-ink bg-ink py-6 text-paper">
-      <div className="marquee-track">
-        {row.map((s, i) => (
-          <span key={i} className="flex items-center gap-10 pr-10 font-display text-3xl font-semibold tracking-[-0.03em] md:text-5xl">
-            {s}
-            <span className="text-clay">✦</span>
-          </span>
-        ))}
-      </div>
+      <MarqueeRow speed={1.6} />
+      <MarqueeRow speed={-1.2} outline className="mt-3" />
     </div>
   );
 }
+
+/**
+ * Endless ticker driven per frame (not CSS) so it keeps moving even when the OS
+ * asks for reduced motion; page scrolling speeds it up and flips its direction.
+ */
+function MarqueeRow({ speed, outline = false, className = "" }: { speed: number; outline?: boolean; className?: string }) {
+  const baseX = useMotionValue(0);
+  const { scrollY } = useScroll();
+  const velocity = useSpring(useVelocity(scrollY), { damping: 50, stiffness: 400 });
+  const boost = useTransform(velocity, [-1000, 0, 1000], [-4, 0, 4], { clamp: false });
+  const x = useTransform(baseX, (v) => `${wrap(-50, 0, v)}%`);
+  const dir = useRef(1);
+
+  useAnimationFrame((_, delta) => {
+    const b = boost.get();
+    if (b < 0) dir.current = -1;
+    else if (b > 0) dir.current = 1;
+    const step = dir.current * speed * (delta / 1000);
+    baseX.set(baseX.get() + step + step * Math.abs(b));
+  });
+
+  const row = [...services, ...services];
+  return (
+    <div className={`overflow-hidden whitespace-nowrap ${className}`}>
+      <motion.div className="flex w-max" style={{ x }}>
+        {row.map((s, i) => (
+          <span
+            key={i}
+            className={`flex items-center gap-10 pr-10 font-display font-semibold tracking-[-0.03em] ${
+              outline ? "text-2xl text-transparent [-webkit-text-stroke:1px_rgba(243,239,231,0.45)] md:text-4xl" : "text-3xl md:text-5xl"
+            }`}
+          >
+            {s}
+            <span className={outline ? "text-clay/60 [-webkit-text-stroke:0]" : "text-clay"}>✦</span>
+          </span>
+        ))}
+      </motion.div>
+    </div>
+  );
+}
+
+const wrap = (min: number, max: number, v: number) => {
+  const r = max - min;
+  return ((((v - min) % r) + r) % r) + min;
+};
 
 const capPhotos = [scenes.fabricRolls, scenes.designer, scenes.sewingLine, scenes.spools, scenes.rack2];
 
